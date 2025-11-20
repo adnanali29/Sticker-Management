@@ -240,7 +240,6 @@
         const defaultConfig = {
             system_title: 'Sticker Management System',
             company_name: 'Chia Jiya Stickers',
-            admin_email: 'adnan@addyfitness.com',
             footer_text: 'All rights reserved by Pixel Web Pages',
             primary_color: '#667eea',
             secondary_color: '#764ba2',
@@ -1218,77 +1217,171 @@
             currentView = 'login';
             renderCurrentView();
         }
+        function renderForgotPassword() {
+            const config = getConfig();
+            return `
+            <div class="center-container">
+                <div class="login-card p-10 w-full max-w-md">
+                    <div class="text-center mb-8">
+                        <h1 class="text-3xl font-bold mb-2 text-white">Change Password</h1>
+                        <p class="text-gray-300">Verify credentials to set a new password</p>
+                    </div>
+
+                    <form onsubmit="handleForgotPassword(event)" class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-semibold mb-1 text-gray-300">Email</label>
+                            <input
+                                type="email"
+                                id="reset-email"
+                                class="w-full px-4 py-3 rounded-xl"
+                                placeholder="Enter your email"
+                                value="" 
+                                required
+                            />
+                        </div>
+
+                        <div>
+                            <label class="block text-sm font-semibold mb-1 text-gray-300">Current Password</label>
+                            <div class="relative">
+                                <input
+                                    type="password"
+                                    id="current-password"
+                                    class="w-full px-4 py-3 rounded-xl"
+                                    placeholder="Enter current password"
+                                    required
+                                />
+                                <button
+                                    type="button"
+                                    onclick="togglePasswordVisibility('current-password', 'current-eye-icon')"
+                                    class="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+                                >
+                                    <span id="current-eye-icon">👁️</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div>
+                            <label class="block text-sm font-semibold mb-1 text-gray-300">New Password</label>
+                            <div class="relative">
+                                <input
+                                    type="password"
+                                    id="new-password"
+                                    class="w-full px-4 py-3 rounded-xl"
+                                    placeholder="Enter new password"
+                                    required
+                                />
+                                <button
+                                    type="button"
+                                    onclick="togglePasswordVisibility('new-password', 'new-eye-icon')"
+                                    class="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+                                >
+                                    <span id="new-eye-icon">👁️</span>
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <div>
+                            <label class="block text-sm font-semibold mb-1 text-gray-300">Confirm New Password</label>
+                            <input
+                                type="password"
+                                id="confirm-password"
+                                class="w-full px-4 py-3 rounded-xl"
+                                placeholder="Confirm new password"
+                                required
+                            />
+                        </div>
+
+                        <button type="submit" class="btn-primary w-full text-white font-semibold py-3 rounded-xl mt-2">
+                            Update Password
+                        </button>
+
+                        <button type="button" onclick="backToLogin()" class="w-full text-center text-sm font-medium text-white hover:text-opacity-80 transition-all mt-4">
+                            Back to Login
+                        </button>
+                    </form>
+                </div>
+            </div>
+            `;
+        }
 
         // Adapted from your OLD file's logic
         async function handleForgotPassword(event) {
             event.preventDefault();
-            const config = getConfig();
-            const email = document.getElementById('reset-email').value;
-            const newPasswordSection = document.getElementById('new-password-section');
-            const newPasswordInput = document.getElementById('new-password');
-            const confirmPasswordInput = document.getElementById('confirm-password');
             const submitButton = event.target.querySelector('button[type="submit"]');
+            submitButton.textContent = 'Updating...';
+            submitButton.disabled = true;
 
-            // Check if user is in the verification stage
-            if (newPasswordSection.style.display === 'none') {
-                if (email.toLowerCase() !== (config.admin_email || defaultConfig.admin_email).toLowerCase()) {
-                    showToast('Email not authorized for password reset', 'error');
-                    return;
-                }
-                
-                // Check if email exists in DB (though we only allow admin)
-                const { data: user, error } = await supabaseClient
+            const email = document.getElementById('reset-email').value;
+            const currentPasswordInput = document.getElementById('current-password').value;
+            const newPassword = document.getElementById('new-password').value;
+            const confirmPassword = document.getElementById('confirm-password').value;
+
+            // 1. Basic Validation
+            if (newPassword !== confirmPassword) {
+                showToast('New passwords do not match', 'error');
+                submitButton.textContent = 'Update Password';
+                submitButton.disabled = false;
+                return;
+            }
+
+            if (newPassword === currentPasswordInput) {
+                showToast('New password must be different from current password', 'error');
+                submitButton.textContent = 'Update Password';
+                submitButton.disabled = false;
+                return;
+            }
+
+            // 2. Password Strength Check
+            const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[!@#$%^&*])(?=.{8,})/;
+            if (!passwordRegex.test(newPassword)) {
+                showToast('Password must be 8+ chars, with uppercase, lowercase, number, and special character (!@#$%^&*)', 'error');
+                submitButton.textContent = 'Update Password';
+                submitButton.disabled = false;
+                return;
+            }
+
+            try {
+                // 3. Fetch user to verify CURRENT password
+                const { data: user, error: fetchError } = await supabaseClient
                     .from('users')
-                    .select('id')
+                    .select('password')
                     .eq('email', email)
                     .single();
 
-                if (error || !user) {
-                    showToast('Admin user not found in database.', 'error');
+                if (fetchError || !user) {
+                    showToast('Email not found.', 'error');
+                    submitButton.textContent = 'Update Password';
+                    submitButton.disabled = false;
                     return;
                 }
 
-                // Show password fields
-                newPasswordSection.style.display = 'block';
-                submitButton.textContent = 'Reset Password';
-                showToast('Email verified! Enter new password', 'success');
-            
-            } else {
-                // User is in the reset stage
-                const newPassword = newPasswordInput.value;
-                const confirmPassword = confirmPasswordInput.value;
-                
-                if (newPassword !== confirmPassword) {
-                    showToast('Passwords do not match', 'error');
+                // 4. Check if Current Password matches DB
+                if (user.password !== currentPasswordInput) {
+                    showToast('Current password is incorrect.', 'error');
+                    submitButton.textContent = 'Update Password';
+                    submitButton.disabled = false;
                     return;
                 }
 
-                // --- Password Convention Check ---
-                const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[!@#$%^&*])(?=.{8,})/;
-                if (!passwordRegex.test(newPassword)) {
-                    showToast('Password must be 8+ chars, with uppercase, lowercase, number, and special character (!@#$%^&*)', 'error');
-                    return;
-                }
-                // --- End Check ---
-
-                submitButton.textContent = 'Resetting...';
-                submitButton.disabled = true;
-
-                // Update the password in Supabase
-                const { error } = await supabaseClient
+                // 5. Update to New Password
+                const { error: updateError } = await supabaseClient
                     .from('users')
-                    .update({ password: newPassword }) // Storing plaintext
+                    .update({ password: newPassword })
                     .eq('email', email);
 
-                if (error) {
-                    showToast(`Failed to update password: ${error.message}`, 'error');
-                    submitButton.textContent = 'Reset Password';
-                    submitButton.disabled = false;
-                } else {
-                    showToast('Password reset successful! 🎉', 'success');
-                    currentView = 'login';
-                    renderCurrentView();
+                if (updateError) {
+                    throw updateError;
                 }
+
+                showToast('Password updated successfully! Please login.', 'success');
+                currentView = 'login';
+                renderCurrentView();
+
+            } catch (error) {
+                console.error('Reset error:', error);
+                showToast(`Error: ${error.message}`, 'error');
+                submitButton.textContent = 'Update Password';
+                submitButton.disabled = false;
             }
         }
 
